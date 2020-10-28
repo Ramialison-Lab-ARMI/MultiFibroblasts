@@ -1,0 +1,137 @@
+---
+title: "Multi-fibroblast analysis - Mouse Cell Atlas stromal dataset - by Elvira Forte, Hieu Nim"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(magrittr)
+library(tidyverse)
+library(assertthat)
+library(Seurat)
+library(readxl)
+library(pheatmap)
+library(writexl)
+library(dplyr)
+library(Matrix)
+library(cowplot)
+```
+
+
+
+```{r}
+stromaB <- readRDS("Cell2018StromalCells.rds")
+genes <- c("Col1a1","Thy1", "Cyp11a1", "Cldn11", "Lhx9", "Nrsa1","Tbx20", "Col2a1", "Itga4","Foxf1", "Hhex", "Wnt7b", "Pax8","Bmp7" )
+DotPlot(stromaB, features = rev(genes), dot.scale = 8) + RotatedAxis()+theme(axis.text.x =element_text(face='italic'))
+clusters <- levels(stromaB@meta.data$celltypeSub) 
+conserved.markers <- list()
+for (i in 1:length(clusters)) {
+            this_cluster <- clusters[i]
+            markers <- FindMarkers(stromaB, ident.1=this_cluster,  min.pct = 0.25) #Hieu fixed
+                        markers$cluster <- this_cluster
+                        conserved.markers[[paste0(this_cluster, " ")]] <- markers
+            }
+write_xlsx(conserved.markers,"StromaSubclFindMarkers.xlsx")
+
+
+DefaultAssay(stromaB) <- "RNA"
+stromaB.marker <- FindAllMarkers(stromaB, thresh.use=0.25, min.diff.pct = 0.3, only.pos = TRUE)
+stromaB.marker  <- cbind(stromaB.marker$gene, stromaB.marker[,1:ncol(stromaB.marker)])
+stromaB.marker  <- split(stromaB.marker , f=stromaB.marker$cluster)
+write_xlsx(stromaB.marker,"StromaSubcl_markers.xlsx")
+```
+
+
+
+```{r}
+
+clusters.averagesSub <- AverageExpression(stromaB, return.seurat=TRUE)
+Idents(clusters.averagesSub) <- factor(Idents(clusters.averagesSub), levels = c("KidneyA","KidneyB","Liver","LungA","LungB","LungC","NeonatalHeart","Testis"))
+DoHeatmap(clusters.averagesSub, features = rev(genes), size = 5, draw.lines=0, label=FALSE)
+```
+```{r}
+##identify differential expressed genes across conditions
+clusters <- levels(stromaB@meta.data$celltypeSub) 
+markers <- list()
+for (i in 1:length(clusters)) {
+            this_cluster <- clusters[i]
+            sub <-subset(stromaB, idents = this_cluster)
+
+avg.sub <- log1p(AverageExpression(sub, verbose = FALSE)$RNA)
+avg.sub$gene <- rownames(avg.sub)
+markers[[paste0(this_cluster)]] <- avg.sub
+}
+
+```
+```{r}
+##identify differential expressed genes across conditions
+
+Idents(stromaB) <- stromaB@meta.data$orig.ident
+clusters <- levels(stromaB)
+avg_expression_stromaB <- list()
+for (i in 1:length(clusters)) {
+         this_cluster <- clusters[i]
+sub <-subset(stromaB, idents = this_cluster)
+      Idents(sub) <- 'celltypeSub'
+avg.sub <- log1p(AverageExpression(sub, verbose = FALSE)$RNA)
+avg.sub$gene <- rownames(avg.sub)
+avg_expression_stromaB[[paste0(this_cluster)]] <- avg.sub
+}
+
+```
+
+```{r}
+## Plot the organ-unique genes
+uniquegenes <- read.table("UniqueGenes.txt", sep="\t")
+colnames(uniquegenes) <- c("GeneSymbol","Organ")
+
+###Kidney
+Group1 <- uniquegenes$GeneSymbol[uniquegenes$Organ=="Kidney"]
+stroma1 <- stromaB[which(rownames(stromaB) %in% Group1),]
+stroma2 <- ScaleData(object = stroma1, features = rownames(stroma1))
+selected <- c("Sfn", "Car2","Gdf15","Pdzk1ip1","1700011H14Rik","Kcnk1","Cdh16","Cldn4","Paqr5","Fermt1")
+DoHeatmap(stroma2, features = selected, size = 5, draw.lines=0, label=FALSE)
+
+###Liver
+Group1 <- uniquegenes$GeneSymbol[uniquegenes$Organ=="Liver"]
+stroma1 <- stromaB[which(rownames(stromaB) %in% Group1),]
+stroma2 <- ScaleData(object = stroma1, features = rownames(stroma1))
+selected <- c("Cd5l","Vsig4")
+DoHeatmap(stroma2, features = selected, size = 5, draw.lines=0, label=FALSE)
+
+###Lung
+Group1 <- uniquegenes$GeneSymbol[uniquegenes$Organ=="Lung"]
+stroma1 <- stromaB[which(rownames(stromaB) %in% Group1),]
+stroma2 <- ScaleData(object = stroma1, features = rownames(stroma1))
+selected <- c("Fgf1","Ear2")
+DoHeatmap(stroma2, features = selected, size = 5, draw.lines=0, label=FALSE)
+
+###Neonatal Heart
+Group1 <- uniquegenes$GeneSymbol[uniquegenes$Organ=="Heart"]
+stroma1 <- stromaB[which(rownames(stromaB) %in% Group1),]
+stroma2 <- ScaleData(object = stroma1, features = rownames(stroma1))
+selected <- c("Tbx20","Frzb")
+DoHeatmap(stroma2, features = selected, size = 5, draw.lines=0, label=FALSE)
+
+###Testis/Gonad
+Group1 <- uniquegenes$GeneSymbol[uniquegenes$Organ=="Gonad"]
+stroma1 <- stromaB[which(rownames(stromaB) %in% Group1),]
+stroma2 <- ScaleData(object = stroma1, features = rownames(stroma1))
+selected <- c("Akr1cl")
+DoHeatmap(stroma2, features = selected, size = 5, draw.lines=0, label=FALSE)
+
+## Selected gene list 1
+Group1 <- c("Col1a1","Thy1", "Cyp11a1", "Cldn11", "Lhx9", "Nrsa1","Tbx20", "Col2a1", "Itga4","Foxf1", "Hhex", "Wnt7b", "Pax8","Bmp7" )
+stroma1 <- stromaB[which(rownames(stromaB) %in% Group1),]
+stroma2 <- ScaleData(object = stroma1, features = rownames(stroma1))
+DoHeatmap(stroma2, features = rev(Group1[which(Group1 %in% rownames(stroma1))]), size = 5, draw.lines=0, label=FALSE)
+
+## Selected gene list 2
+Group1 <- c("Cyp11a1", "Lhx9","Akr1cl", "Tbx20", "Col2a1", "Frzb","Foxf1","Fgf1","Ear2", "Hhex","Cd5l","Vsig4", "Wnt7b", "Pax8","Sfn", "Car2","Gdf15","Pdzk1ip1","1700011H14Rik","Kcnk1","Cdh16","Cldn4","Paqr5","Fermt1" )
+stroma1 <- stromaB[which(rownames(stromaB) %in% Group1),]
+stroma2 <- ScaleData(object = stroma1, features = rownames(stroma1))
+
+GetAssayData(object = stroma2[["RNA"]], slot = "data")[1:5,1:5]
+GetAssayData(object = stroma2[["RNA"]], slot = "scale.data")[1:5,1:5]
+DoHeatmap(stroma2, features = rev(Group1[which(Group1 %in% rownames(stroma1))]), size = 5, draw.lines=0, label=FALSE)
+
+```
